@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Ball Physics</title>
+<style type="text/css">
+body {
+    font-family: sans-serif;
+    background: #223;
+    color: #BBC;
+    font-size: 16px;
+    text-align: center;
+    padding: 0;
+    margin: 0;
+    height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+* {
+	box-sizing: border-box;
+}
+#header, #footer {
+    background: #112;
+    user-select: none;
+}
+#gamescreen {
+    flex: 1;
+    position: relative;
+    user-select: none;
+    cursor: default;
+    white-space: nowrap;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+#gamecanvas {
+    flex: 1;
+}
+</style>
+<script src="ball-physics.js"></script>
+</head>
+<body>
+<div id="header">Ball Physics</div>
+<div id="gamescreen"><noscript>Please enable Javascript.</noscript></div>
+<div id="footer">&nbsp;</div>
+</body>
+</html>
