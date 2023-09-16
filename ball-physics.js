@@ -104,8 +104,8 @@ var layout = [
     [ 0,  0,  8, 21, 22,  4,  0,  8,  0,  6, 10,  0, 18,  0,  0,  0,  0,  0,  0,  0],
     [ 0,  0,  0,  1,  1,  0,  0,  8,  0,  0,  0,  0,  0, 18,  0,  0,  0,  0,  0,  0],
     [ 0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,  1, 20, 18,  0,  0,  0,  0,  0],
-    [ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0],
-    [ 0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]
+    [ 2,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0],
+    [ 0,  0,  0,  0,  0,  0,  0,  0,  4,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]
 ];
 var tilePoints = [
     // Inward-facing boundaries: 8-Right, 4-Left, 2-Bottom, 1-Top 
@@ -317,6 +317,11 @@ function game_update() {
     } else if (keyState[3]) {
         playerXSpeed += 0.06;
     }
+    if (keyState[5] && (playerASpeed > -0.5)) {
+        playerASpeed -= 0.1 / playerSize;
+    } else if (keyState[6] && (playerASpeed < 0.5)) {
+        playerASpeed += 0.1 / playerSize;
+    }
 
     // Hold space to stop and hold the ball.
     if (keyState[4]) {
@@ -375,7 +380,7 @@ function game_update() {
         
         context.strokeStyle = "#48F";
         context.beginPath();
-        context.moveTo(32.5 - (playerSize * Math.sin(playerA)), 32.5 - (playerSize * Math.cos(playerA)));
+        context.moveTo(32.5 - (playerSize * Math.sin(-playerA)), 32.5 - (playerSize * Math.cos(-playerA)));
         context.lineTo(32.5, 32.5);
         context.stroke();
     }
@@ -411,6 +416,7 @@ function game_update() {
     let cLef = (playerX - playerSize) | 0;
     let cRig = (playerX + playerSize) | 0;
 
+    /* #region Gather vertices for collision */
     // All vertices which need to be checked for collision.
     let segments = [];
 
@@ -513,6 +519,9 @@ function game_update() {
             context.stroke();
         }
     }
+    /* #endregion */
+
+    /* #region Find nearest collision point */
 
     // For each boundary (Ax,Ay)->(Bx,By), project the current position
     // of the player (Px,Py) onto it.
@@ -638,7 +647,9 @@ function game_update() {
             }
         }
     }
-    
+    /* #endregion */
+
+    /* #region Bounce against boundary */
     if (Ndist != Infinity) {
         // Time to collide with the boundary and bounce the ball off of it!
         // (Oh boy!)
@@ -685,27 +696,49 @@ function game_update() {
         let dot = playerXSpeed * dirX + playerYSpeed * dirY;
         newXSpeed -= dot * dirX * 0.6;
         newYSpeed -= dot * dirY * 0.6;
-        // First, stop the player.
-        //playerYSpeed -= dot * dirY;
-        //playerXSpeed -= dot * dirX;
-        // Now bounce the player.
-        //playerYSpeed -= dot * dirY * 0.6;
-        //playerXSpeed -= dot * dirX * 0.6;
 
-        // Now apply surface friction to the player's cross-axis.
-        dot = playerXSpeed * dirY + playerYSpeed * -dirX;
+        // Simple cross-axis handling: only dampens the speed (friction) and
+        // calculates angular velocity for animation purposes.
+        /*dot = playerXSpeed * dirY + playerYSpeed * -dirX;
         newXSpeed += dot * dirY * 0.98;
         newYSpeed += dot * -dirX * 0.98;
-        playerASpeed = (-dot  / playerSize) * 0.98;
-        // First, stop the player.
-        //playerXSpeed -= dot * dirY;
-        //playerYSpeed -= dot * -dirX;
-        // Now add dampened movement.
-        //playerXSpeed += dot * dirY * 0.95;
-        //playerYSpeed += dot * -dirX * 0.95;
+        playerASpeed = (dot  / playerSize) * 0.98;*/
+
+        
+        // Complex cross-axis handling: borrowing Garwin physics to allow the
+        // ball's angular velocity to affect movement and vice versa.
+
+        // Cross-axis velocity.
+        dot = playerXSpeed * dirY + playerYSpeed * -dirX;
+        
+        // Friction can be [-1..1], and describes how angular velocity and
+        // lateral velocity interact during collisions.
+        //       0 - Balanced exchange, velocities equalize.
+        // [-1..0) - Gradual exchange, surface feels more slippery.
+        //  (0..1] - Overexchange, velocities switch back and forth with each bounce.
+        // Values outside this range are unhelpfully explosive disasters.
+        let friction = 0;
+
+        // Inertia can be 0 and above, and describes how much influence the
+        // ball's angular velocity has during collisions.
+        // At 0, angular velocity has no effect and is for animation only, set
+        //   exclusively by its lateral velocity. (Only thrust movement works)
+        // At huge values, it's difficult to "push" the ball on a surface, but
+        //   easy to move it in mid air and to move it with angular velocity.
+        // 2/3 and below are "realistic", with 2/5 being average.
+        let inertia = 2/5;
+
+        let newDot = ((1 - (inertia * friction)) * dot) + (inertia * (1 + friction) * playerSize * playerASpeed);
+        newDot /= (1 + inertia);
+        newXSpeed += newDot * dirY;
+        newYSpeed += newDot * -dirX;
+
+        let newASpeed = ((1 + friction) * dot) + ((inertia - friction) * playerSize * playerASpeed);
+        newASpeed /= (playerSize * (1 + inertia));
 
         playerXSpeed = newXSpeed;
         playerYSpeed = newYSpeed;
+        playerASpeed = newASpeed;
 
         // On the collision visualizer, draw a dot to show where the collision
         // point is.
@@ -716,6 +749,7 @@ function game_update() {
             context.fill();
         }
     }
+    /* #endregion */
 
     // Draw the layout.
     for (let y = 0; y < layout.length; y++) {
@@ -763,8 +797,8 @@ function game_update() {
     context.fillStyle = "#048";
     context.beginPath();
     context.moveTo(playerX + 0.5, playerY + 0.5);
-    context.arc(playerX + 0.5,playerY + 0.5,playerSize,-playerA,(Math.PI / 2) - playerA);
+    context.arc(playerX + 0.5,playerY + 0.5,playerSize,playerA,(Math.PI / 2) + playerA);
     context.moveTo(playerX + 0.5, playerY + 0.5);
-    context.arc(playerX + 0.5,playerY + 0.5,playerSize,-playerA - Math.PI,(Math.PI / 2) - playerA - Math.PI);
+    context.arc(playerX + 0.5,playerY + 0.5,playerSize,playerA + Math.PI,(Math.PI / 2) + playerA + Math.PI);
     context.fill()
 }
